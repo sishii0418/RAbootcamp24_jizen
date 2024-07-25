@@ -1,0 +1,106 @@
+# 分析
+
+石井俊輔 (The University of Edinburgh, s.ishii [at] sms.ed.ac.uk)
+
+```{r}
+require(tidyverse)
+require(modelsummary)
+```
+
+## (a) 記述統計
+
+```{r}
+master_data <- read_rds("master_data.rds")
+```
+
+### Master Dataの各列に含まれるNAの数
+```{r}
+master_data %>%
+    is.na() %>%
+    summary()
+```
+
+NAがあるとき, `is.na()`の値は`TRUE`になるため, その数を数えればよい.
+`summary()`の出力より, `women_gradrate_4yr`が24, `men_gradrate_4yr`が65あることがわかる.
+
+### 記述統計を作成
+石井: パス?
+never_swichersが計算できない?
+
+```{r}
+
+selected_vars <- master_data %>%
+    ungroup() %>%
+    select(total_gradrate_4yr,
+           women_gradrate_4yr,
+           men_gradrate_4yr,
+           totcohortsize,
+           instatetuition)
+datasummary(All(selected_vars) ~ Mean + SD, data = master_data)
+
+
+master_data_ans <- read.csv("01_data/intermediate/master.csv")
+
+master_data_ans %>%
+    mutate(never_swichers = yearofsem == 1991 | yearofsem == Inf) %>%
+    select(never_swichers) %>% summary()
+
+```
+
+### 4年卒業率の平均推移
+```{r}
+master_data %>%
+    group_by(year) %>%
+    summarise(mean(total_gradrate_4yr)) %>%
+    ggplot(aes(x = year, y = `mean(total_gradrate_4yr)`)) +
+    geom_line() +
+    xlab("Year") +
+    ylab("4-year graduation rate") +
+    xlim(1990, 2010) +
+    ylim(0.25, 0.45)
+
+```
+
+### Semester導入率の推移
+```{r}
+master_data %>%
+    group_by(year, semester) %>%
+    count() %>%
+    pivot_wider(names_from = "semester", values_from = "n") %>%
+    mutate(semester_rate = `1` / (`0` + `1`)) %>%
+    ggplot(aes(x = year, y = semester_rate)) +
+    geom_line() +
+    xlab("Year") +
+    ylab("Fraction of schools on semesters") +
+    xlim(1990, 2010) +
+    ylim(0.8, 1)
+
+```
+
+### 3変数を横軸, 4年卒業率を縦軸にとった散布図
+```{r}
+# 先に女子学生比率と白人学生比率の変数を作成
+master_data <- master_data %>%
+    mutate(women_fraction = w_cohortsize / totcohortsize) %>%
+    mutate(white_fraction = as.integer(white_cohortsize) / totcohortsize)
+
+my_plot <- function(master_data, x_var) {
+    master_data %>%
+        ggplot(aes_string(x = x_var, y = "total_gradrate_4yr")) +
+        geom_point() +
+        xlab(x_var) +
+        ylab("4-year graduation rate") +
+        ylim(0, 1)
+}
+
+my_plot(master_data, "women_fraction")
+my_plot(master_data, "white_fraction")
+my_plot(master_data, "instatetuition")
+```
+
+## (b) 回帰分析
+```{r}
+model <- lm(total_gradrate_4yr ~ after_introduced, data = master_data)
+# 表に出力
+msummary(model)
+```

@@ -1,0 +1,138 @@
+# データ整理と変換
+
+石井 俊輔 (The University of Edinburgh, s.ishii [at] sms.ed.ac.uk)
+
+```{r}
+require(tidyverse)
+library(readxl)
+```
+
+## (a) Semester Data の整形
+
+### 生データの読み込み
+```{r}
+semester_data_1 <- read.csv("01_data/raw/semester_dummy/semester_data_1.csv", skip = 1)
+semester_data_2 <- read.csv("01_data/raw/semester_dummy/semester_data_2.csv")
+```
+
+### 読み込んだ2つのデータを結合
+```{r}
+# 先にsemester_data_2に列名を付与
+colnames(semester_data_2) <- colnames(semester_data_1)
+semester_data_combined <- bind_rows(semester_data_1, semester_data_2)
+```
+
+### `Y`列を削除
+```{r}
+semester_data_combined <- semester_data_combined %>%
+    select(-Y)
+```
+
+### semester制が導入された年の列を作成
+```{r}
+semester_data_combined <- semester_data_combined %>%
+    # 大学ごとにまとめる
+    group_by(unitid) %>%
+    # semester変数が0のときはInfとしてyearと掛けると, 積の最小値がセメスター制導入年になる.
+    # データの観測期間中にセメスター制を導入しなかった場合, Infが返される.
+    mutate(semester_intro_year = min(year * ifelse(semester == 1, 1, Inf)))
+```
+
+### semester制導入後を示すダミー変数を作成
+```{r}
+semester_data_combined <- semester_data_combined %>%
+    group_by(unitid) %>%
+    mutate(after_introduced = ifelse(year >= semester_intro_year, 1, 0))
+```
+
+## (b) Grad-rate Data の整形
+
+### 生データの読み込みと結合
+```{r}
+files <- list.files(path = "01_data/raw/outcome", pattern = "*.xlsx", full.names = T)
+gradrate_data <- sapply(files, read_excel, simplify = FALSE) %>%
+    bind_rows()
+```
+
+### 女子学生の4年卒業率に0.01を掛けて, 0から1のスケールに変更
+```{r}
+gradrate_data <- gradrate_data %>%
+    mutate(women_gradrate_4yr = women_gradrate_4yr * 0.01)
+```
+
+### 男女合計の4年卒業率と男子学生の4年卒業率を示す列を作成
+```{r}
+gradrate_data <- gradrate_data %>%
+    # 先にint型に変換
+    mutate(m_4yrgrads = as.integer(m_4yrgrads)) %>%
+    mutate(totcohortsize = as.integer(totcohortsize)) %>%
+    # 列を作成
+    mutate(men_gradrate_4yr = m_4yrgrads / m_cohortsize) %>%
+    mutate(total_gradrate_4yr = tot4yrgrads / totcohortsize)
+```
+
+### 計算した卒業率の有効数字を3桁にする
+```{r}
+gradrate_data <- gradrate_data %>%
+    mutate(men_gradrate_4yr = round(men_gradrate_4yr, digits = 3)) %>%
+    mutate(women_gradrate_4yr = round(women_gradrate_4yr, digits = 3)) %>%
+    mutate(total_gradrate_4yr = round(total_gradrate_4yr, digits = 3))
+```
+
+### 1991年から2010年までのデータフレームにする
+```{r}
+gradrate_data <- gradrate_data %>%
+    filter(1991 <= year & year <= 2010)
+```
+
+## (c) Covariates Data の整形
+
+### 生データの読み込み
+```{r}
+covariates <- read_excel("01_data/raw/covariates/covariates.xlsx")
+```
+
+### 列名`university_id`を`unitid`に変更
+```{r}
+covariates <- covariates %>%
+    rename(unitid = university_id)
+```
+
+### 列`unitid`に含まれる文字列"aaaa"を削除
+```{r}
+covariates <- covariates %>%
+    # ついでにint型にする
+    mutate(unitid = as.integer(str_replace(covariates$unitid, "aaaa", "")))
+```
+
+### データフレームをwide型に変更
+```{r}
+covariates <- covariates %>%
+    pivot_wider(names_from = category, values_from = value)
+```
+
+### outcome, semester_dummyに含まれる年を調べ, covariatesデータの期間を他のデータと同じ1991年から2010年までに揃える
+```{r}
+covariates <- covariates %>%
+    filter(1991 <= year & year <= 2010) %>%
+    # ついでにint型に変更
+    mutate(year = as.integer(year))
+```
+
+### outcome_dataに含まれるunitidを特定し, covariatesに含まれるunitidをoutcomeデータに揃える
+```{r}
+covariates <- covariates %>%
+    filter(unitid %in% gradrate_data$unitid)
+```
+
+## (d) Master Data の作成
+```{r}
+master_data <- semester_data_combined %>%
+    left_join(covariates, by = c("unitid", "year")) %>%
+    left_join(gradrate_data, by = c("unitid", "year"))
+```
+
+### 書き出し
+```{r}
+saveRDS(master_data, "master_data.rds")
+```
