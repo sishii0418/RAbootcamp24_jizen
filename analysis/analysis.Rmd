@@ -5,6 +5,7 @@
 ```{r}
 require(tidyverse)
 require(modelsummary)
+require(webshot2)
 ```
 
 ## (a) 記述統計
@@ -24,11 +25,7 @@ NAがあるとき, `is.na()`の値は`TRUE`になるため, その数を数え�
 `summary()`の出力より, `women_gradrate_4yr`が24, `men_gradrate_4yr`が65あることがわかる.
 
 ### 記述統計を作成
-石井: パス?
-never_swichersが計算できない?
-
 ```{r}
-
 selected_vars <- master_data %>%
     ungroup() %>%
     select(total_gradrate_4yr,
@@ -36,15 +33,15 @@ selected_vars <- master_data %>%
            men_gradrate_4yr,
            totcohortsize,
            instatetuition)
-datasummary(All(selected_vars) ~ Mean + SD, data = master_data)
+datasummary(All(selected_vars) ~ Mean + SD, data = master_data, output = "figures/a2.png")
 
+# 確認用
+# master_data_ans <- read.csv("01_data/intermediate/master.csv")
 
-master_data_ans <- read.csv("01_data/intermediate/master.csv")
-
-master_data_ans %>%
-    mutate(never_swichers = yearofsem == 1991 | yearofsem == Inf) %>%
-    select(never_swichers) %>% summary()
-
+# master_data_ans %>%
+#     mutate(never_swichers = yearofsem == 1991 | yearofsem == Inf) %>%
+#     select(never_swichers) %>%
+#     summary()
 ```
 
 ### 4年卒業率の平均推移
@@ -58,6 +55,7 @@ master_data %>%
     ylab("4-year graduation rate") +
     xlim(1990, 2010) +
     ylim(0.25, 0.45)
+ggsave("figures/a3.png")
 
 ```
 
@@ -74,6 +72,7 @@ master_data %>%
     ylab("Fraction of schools on semesters") +
     xlim(1990, 2010) +
     ylim(0.8, 1)
+ggsave("figures/a4.png")
 
 ```
 
@@ -94,13 +93,16 @@ my_plot <- function(master_data, x_var) {
 }
 
 my_plot(master_data, "women_fraction")
+ggsave("figures/a5_women_fraction.png")
 my_plot(master_data, "white_fraction")
+ggsave("figures/a5_white_fraction.png")
 my_plot(master_data, "instatetuition")
+ggsave("figures/a5_instatetuition.png")
 ```
 
 ## (b) 回帰分析
 ```{r}
 model <- lm(total_gradrate_4yr ~ after_introduced, data = master_data)
 # 表に出力
-msummary(model)
+msummary(model, output = "figures/b1.png")
 ```
